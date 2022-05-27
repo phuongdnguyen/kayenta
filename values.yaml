@@ -1,0 +1,265 @@
+# Default values for kayenta.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: "gcr.io/spinnaker-marketplace/kayenta"
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "0.17.0-20200803200017"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations:
+    iam.gke.io/gcp-service-account: your_project-dev-kayenta@<gcp_project_id>.iam.gserviceaccount.com
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "your_project-dev-kayenta"
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+ports:
+  - name: http
+    containerPort: 8090
+    protocol: TCP
+
+service:
+  type: ClusterIP
+  port: 80
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: kayenta.your_project.com
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+volumes: []
+  # - name: config
+  #   configMap:
+  #     name: kayenta-config
+
+volumeMounts: []
+  # - name: config
+  #   mountPath: /opt/kayenta/config
+
+env: []
+  # - name: JAVA_OPTS
+  #   value: "-XX:+UnlockExperimentalVMOptions -Dlogging.level.root=DEBUG"
+
+secret: {}
+  # data:
+  #   storage-key: 123
+  # type: Opaque
+
+configMaps:
+  - name: config
+    data: 
+      kayenta.yml: |-
+        server:
+          port: 8090
+
+        # This should match the name of the master service from when
+        # you deployed the Redis Helm chart earlier.
+        redis:
+          connection: redis://kayenta-redis-master:6379
+
+        kayenta:
+          atlas:
+            enabled: false
+
+          google:
+            enabled: true
+            accounts:
+              - name: your_project-dev-kayenta@<gcp_project_id>.iam.gserviceaccount.com
+                project: <gcp_project_id>
+                jsonPath:
+                bucket: your_project-bucket
+                bucketLocation: asia-southeast1
+                rootFolder: kayenta
+                supportedTypes:
+                  - METRICS_STORE
+                  - OBJECT_STORE
+                  - CONFIGURATION_STORE
+
+        # This is the big one! Here's where you configure your Azure Storage
+        # account and container details.
+          azure:
+            enabled: false
+            accounts:
+              - name: canary-storage
+                storageAccountName: kayentastorage
+                # azure.storageKey is provided via environment AZURE_STORAGEKEY
+                # so it can be stored in a secret. You'll see that in a bit.
+                # Don't check in credentials!
+                accountAccessKey: ${azure.storageKey}
+                container: kayenta
+                rootFolder: kayenta
+                endpointSuffix: core.windows.net
+                supportedTypes:
+                  - OBJECT_STORE
+                  - CONFIGURATION_STORE
+
+          aws:
+            enabled: false
+
+          datadog:
+            enabled: false
+
+          graphite:
+            enabled: false
+
+          newrelic:
+            enabled: false
+
+        # Configure your Prometheus here. Or if you're using something else, disable
+        # Prometheus and configure your own metrics store. The important part is you
+        # MUST have a metrics store configured!
+          prometheus:
+            enabled: true
+            accounts:
+            - name: canary-prometheus
+              endpoint:
+                baseUrl: http://frontend.monitoring.svc:9090
+              supportedTypes:
+                - METRICS_STORE
+
+          signalfx:
+            enabled: true
+
+          wavefront:
+            enabled: false
+
+          gcs:
+            enabled: true
+
+          blobs:
+            enabled: false
+
+          s3:
+            enabled: false
+
+          stackdriver:
+            enabled: false
+
+          memory:
+            enabled: false
+
+          configbin:
+            enabled: false
+
+          remoteJudge:
+            enabled: false
+
+        # Enable the SCAPE endpoint that has the same user experience that the Canary StageExecution in Deck/Orca has.
+        # By default this is disabled - in standalone we enable it!
+          standaloneCanaryAnalysis:
+            enabled: true
+
+          metrics:
+            retry:
+              series: SERVER_ERROR
+              statuses: REQUEST_TIMEOUT, TOO_MANY_REQUESTS
+              attempts: 10
+              backoffPeriodMultiplierMs: 1000
+
+          serialization:
+            writeDatesAsTimestamps: false
+            writeDurationsAsTimestamps: false
+
+        management.endpoints.web.exposure.include: '*'
+        management.endpoint.health.show-details: always
+
+        keiko:
+          queue:
+            redis:
+              queueName: kayenta.keiko.queue
+              deadLetterQueueName: kayenta.keiko.queue.deadLetters
+
+        spectator:
+          applicationName: ${spring.application.name}
+          webEndpoint:
+            enabled: true
+
+        swagger:
+          enabled: true
+          title: Kayenta API
+          description:
+          contact:
+          patterns:
+            - /admin.*
+            - /canary.*
+            - /canaryConfig.*
+            - /canaryJudgeResult.*
+            - /credentials.*
+            - /fetch.*
+            - /health
+            - /judges.*
+            - /metadata.*
+            - /metricSetList.*
+            - /metricSetPairList.*
+            - /metricServices.*
+            - /pipeline.*
+            - /standalone.*

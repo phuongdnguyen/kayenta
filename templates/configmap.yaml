@@ -1,0 +1,12 @@
+{{- range $cm := .Values.configMaps }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kayenta.fullname" $ }}
+  labels:
+    {{- include "kayenta.labels" $ | nindent 4 }}
+{{- with $cm.data }}
+data:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
